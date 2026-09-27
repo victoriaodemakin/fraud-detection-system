@@ -29,7 +29,22 @@ public class PgpService
         var pubPath = Path.Combine(keysDir, "pgp-public.asc");
         var secPath = Path.Combine(keysDir, "pgp-private.asc");
 
-        if (!File.Exists(pubPath) || !File.Exists(secPath))
+        // On a host with an ephemeral filesystem (e.g. Render's free tier), files written at
+        // runtime do not survive a redeploy. If that happened here, a freshly generated key
+        // pair would make every previously encrypted value in the database permanently
+        // unreadable. So the key pair can instead be supplied via environment variables
+        // (PGP_PUBLIC_KEY / PGP_PRIVATE_KEY, holding the ascii-armored key text) and is written
+        // to disk from there on every start-up, keeping the same key pair across redeploys.
+        // Falls back to generating (and then reusing, as long as the disk persists) a key pair
+        // when those variables are not set, which is fine for local development.
+        var envPub = Environment.GetEnvironmentVariable("PGP_PUBLIC_KEY");
+        var envSec = Environment.GetEnvironmentVariable("PGP_PRIVATE_KEY");
+        if (!string.IsNullOrWhiteSpace(envPub) && !string.IsNullOrWhiteSpace(envSec))
+        {
+            File.WriteAllText(pubPath, envPub);
+            File.WriteAllText(secPath, envSec);
+        }
+        else if (!File.Exists(pubPath) || !File.Exists(secPath))
         {
             GenerateKeyPair(pubPath, secPath);
         }

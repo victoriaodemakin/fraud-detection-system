@@ -1,0 +1,8 @@
+bin/
+obj/
+keys/
+backups/
+frauddetection.db*
+appsettings.Development.json
+run_out.log
+*.log
