@@ -1,0 +1,11 @@
+const BASE = "http://localhost:5073/api";
+const login = await (await fetch(BASE + "/auth/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "admin", password: "admin123" }) })).json();
+const h = { Authorization: `Bearer ${login.token}` };
+const runs = await (await fetch(BASE + "/admin/model/runs", { headers: h })).json();
+const id = runs[0].id;
+const run = await (await fetch(BASE + `/admin/model/runs/${id}`, { headers: h })).json();
+const r = run.result;
+console.log("rows", r.rows, "fraud", r.fraudRows, "avg hybrid", JSON.stringify(r.averageHybridScore));
+console.log("code   legitRate  fraudCov  precision  name");
+for (const x of r.rules.sort((a, b) => b.legitRate - a.legitRate)) console.log(x.code.padEnd(7), String(x.legitRate).padEnd(10), String(x.fraudCoverage).padEnd(9), String(x.precision).padEnd(10), x.name);
+console.log(JSON.stringify(r.detectors.rule.tiersLegit), JSON.stringify(r.detectors.hybrid.tiersLegit));

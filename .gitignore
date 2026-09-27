@@ -1,0 +1,40 @@
+# ---- backend (.NET) ----
+backend/bin/
+backend/obj/
+backend/frauddetection.db
+backend/frauddetection.db-shm
+backend/frauddetection.db-wal
+backend/keys/
+backend/backups/
+backend/run_out.log
+backend/appsettings.Development.json
+
+# ---- frontend (Next.js) ----
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/*.tsbuildinfo
+frontend/npm-debug.log*
+
+# ---- ml-service (Python) ----
+ml-service/venv/
+ml-service/__pycache__/
+ml-service/**/__pycache__/
+ml-service/*.pyc
+ml-service/uvicorn_out.log
+ml-service/uvicorn_stdout.log
+ml-service/uvicorn_stderr.log
+ml-service/train_out.log
+ml-service/diag.py
+ml-service/test_minimal.py
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.user
+
+# raw training dataset - not needed at runtime, only by train.py; too large for git
+ml-service/data/creditcard.csv

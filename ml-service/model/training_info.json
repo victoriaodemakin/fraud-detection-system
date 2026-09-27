@@ -1,0 +1,32 @@
+{
+  "trained_at": "2026-09-26T12:42:24.334081+00:00",
+  "random_state": 42,
+  "dataset_rows_raw": 284807,
+  "duplicates_removed": 1081,
+  "dataset_rows_used": 283726,
+  "train_rows": 226980,
+  "train_rows_after_smote": 453204,
+  "test_rows": 56746,
+  "test_fraud": 95,
+  "scaler": "StandardScaler fitted on the training set only (Time, Amount)",
+  "logistic_regression": {
+    "max_iter": 1000,
+    "C": 1.0,
+    "penalty": "l2"
+  },
+  "decision_tree": {
+    "max_depth": 8,
+    "min_samples_leaf": 20,
+    "ccp_alpha": 0.0001,
+    "criterion": "gini"
+  },
+  "smote": {
+    "k_neighbors": 5
+  },
+  "library_versions": {
+    "scikit-learn": "1.9.0",
+    "imbalanced-learn": "0.14.2",
+    "pandas": "3.0.3",
+    "numpy": "2.5.1"
+  }
+}

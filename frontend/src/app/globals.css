@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/* Class-based dark mode: <html class="dark"> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------
+   Colour system: dark purple + dark blue on white (light theme),
+   with a deep-navy dark theme. Every colour is a CSS variable so the
+   whole interface (including charts) follows the theme toggle.
+   ------------------------------------------------------------------ */
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f7f6fd;
+  --surface: #ffffff;
+  --surface-2: #f3f2fb;
+  --line: #e3e0f3;
+  --line-strong: #cfcae8;
+
+  --ink: #17153a;
+  --ink-2: #34305f;
+  --muted: #625e8a;
+
+  --brand: #4c1d95;        /* dark purple */
+  --brand-2: #1e3a8a;      /* dark blue */
+  --brand-soft: #efe9ff;
+  --brand-2-soft: #e3e9ff;
+  --grad-a: #3b1275;
+  --grad-b: #1e3a8a;
+  --on-brand: #ffffff;
+
+  --success: #0f7a4d;  --success-soft: #dcf6e8;
+  --warn: #a35a06;     --warn-soft: #fdf0d2;
+  --danger: #b42318;   --danger-soft: #fde4e1;
+  --info: #1d4ed8;     --info-soft: #dfe8ff;
+
+  --shadow: 0 1px 2px rgba(31, 24, 84, 0.06), 0 8px 24px rgba(31, 24, 84, 0.06);
+  --shadow-lg: 0 20px 50px rgba(31, 24, 84, 0.18);
+  --chart-1: #4c1d95;
+  --chart-2: #1e3a8a;
+  --chart-3: #7c3aed;
+  --chart-4: #3b82f6;
+  --chart-5: #a78bfa;
+  --chart-grid: #e7e4f6;
+}
+
+.dark {
+  --bg: #0b0a1e;
+  --bg-soft: #0f0e28;
+  --surface: #14123a;
+  --surface-2: #1b1948;
+  --line: #2a2762;
+  --line-strong: #3a3680;
+
+  --ink: #eeeaff;
+  --ink-2: #cdc8ee;
+  --muted: #9b97c8;
+
+  --brand: #a78bfa;
+  --brand-2: #7aa2ff;
+  --brand-soft: #2b2168;
+  --brand-2-soft: #16275f;
+  --grad-a: #5b21b6;
+  --grad-b: #2447b8;
+  --on-brand: #ffffff;
+
+  --success: #4ade80;  --success-soft: #0f3a2a;
+  --warn: #fbbf24;     --warn-soft: #43300c;
+  --danger: #ff8a80;   --danger-soft: #4a1a1a;
+  --info: #8fb0ff;     --info-soft: #172a63;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.6);
+  --chart-1: #a78bfa;
+  --chart-2: #7aa2ff;
+  --chart-3: #c4b5fd;
+  --chart-4: #60a5fa;
+  --chart-5: #8b5cf6;
+  --chart-grid: #2a2762;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-soft: var(--bg-soft);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface-2);
+  --color-line: var(--line);
+  --color-linestrong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand2: var(--brand-2);
+  --color-brandsoft: var(--brand-soft);
+  --color-brand2soft: var(--brand-2-soft);
+  --color-success: var(--success);
+  --color-successsoft: var(--success-soft);
+  --color-warn: var(--warn);
+  --color-warnsoft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-dangersoft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-infosoft: var(--info-soft);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Brand gradient helpers */
+.bg-brand-gradient { background: linear-gradient(135deg, var(--grad-a), var(--grad-b)); color: var(--on-brand); }
+.text-brand-gradient {
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.shadow-card { box-shadow: var(--shadow); }
+.shadow-pop { box-shadow: var(--shadow-lg); }
+
+/* Subtle animated mesh for hero areas */
+.hero-mesh {
+  background:
+    radial-gradient(60rem 30rem at 10% -10%, rgba(124, 58, 237, 0.35), transparent 60%),
+    radial-gradient(50rem 30rem at 100% 0%, rgba(59, 130, 246, 0.35), transparent 60%),
+    linear-gradient(135deg, var(--grad-a), var(--grad-b));
+}
+
+/* Scrollbars */
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+/* Skeleton shimmer */
+@keyframes shimmer { 0% { background-position: -200px 0; } 100% { background-position: calc(200px + 100%) 0; } }
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 0px, var(--line) 100px, var(--surface-2) 200px);
+  background-size: 200px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 0.5rem;
+}
+
+/* Pulse dot for "live" indicators */
+@keyframes livepulse { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); } 70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
+.live-dot { width: 8px; height: 8px; border-radius: 9999px; background: #22c55e; animation: livepulse 1.8s infinite; }
+
+/* Print-friendly tables */
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+@keyframes wave { 0%,100% { transform: rotate(0deg); } 20% { transform: rotate(14deg); } 40% { transform: rotate(-8deg); } 60% { transform: rotate(14deg); } 80% { transform: rotate(-4deg); } }
