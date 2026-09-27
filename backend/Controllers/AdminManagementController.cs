@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using FraudDetection.Api.Data;
 using FraudDetection.Api.Models;
@@ -6,6 +7,7 @@ using FraudDetection.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace FraudDetection.Api.Controllers;
 
@@ -387,6 +389,12 @@ public class AdminAuditController(AppDbContext db, AuditService audit) : AdminBa
 }
 
 // ---------------------------------------------------------------------- database management
+// PostgreSQL (hosted on Supabase). Backups are logical (a .zip of CSV exports, one per table,
+// written with COPY ... TO STDOUT) rather than a single file copy, because Postgres has no
+// SQLite-style "VACUUM INTO a single file" operation. Backups are written to local disk, which
+// is not persisted across a redeploy on most hosts (Render's free tier included) -- download a
+// backup soon after creating it, or rely on Supabase's own backup/point-in-time-recovery
+// features (available on paid Supabase plans) for anything that must survive a restart.
 [ApiController]
 [Route("api/admin/database")]
 [Authorize(Policy = "AdminOnly")]
@@ -394,8 +402,14 @@ public class AdminDatabaseController(
     AppDbContext db, AuditService audit, IWebHostEnvironment env, PgpService pgp, MlServiceClient ml,
     SettingsService settings, ILogger<AdminDatabaseController> logger) : AdminBase(db, audit)
 {
-    private string DbPath => Path.Combine(env.ContentRootPath, "frauddetection.db");
     private string BackupDir => Path.Combine(env.ContentRootPath, "backups");
+
+    private async Task<NpgsqlConnection> OpenConnectionAsync()
+    {
+        var conn = new NpgsqlConnection(Db.Database.GetConnectionString());
+        await conn.OpenAsync();
+        return conn;
+    }
 
     [HttpGet]
     public async Task<object> Info()
@@ -404,16 +418,17 @@ public class AdminDatabaseController(
         foreach (var e in Db.Model.GetEntityTypes().OrderBy(e => e.GetTableName()))
         {
             var name = e.GetTableName()!;
-            var count = await Db.Database.SqlQueryRaw<int>($"SELECT COUNT(*) AS Value FROM \"{name}\"").FirstAsync();
+            var count = await Db.Database.SqlQueryRaw<int>($"SELECT COUNT(*)::int AS \"Value\" FROM \"{name}\"").FirstAsync();
             tables.Add(new { name, rows = count, columns = e.GetProperties().Count(), indexes = e.GetIndexes().Count() });
         }
+        var sizeBytes = await Db.Database.SqlQueryRaw<long>("SELECT pg_database_size(current_database())::bigint AS \"Value\"").FirstAsync();
         Directory.CreateDirectory(BackupDir);
-        var backups = new DirectoryInfo(BackupDir).GetFiles("*.db").OrderByDescending(f => f.CreationTimeUtc)
+        var backups = new DirectoryInfo(BackupDir).GetFiles("*.zip").OrderByDescending(f => f.CreationTimeUtc)
             .Select(f => new { f.Name, sizeBytes = f.Length, createdAt = f.CreationTimeUtc }).ToList();
         return new
         {
-            provider = Db.Database.ProviderName, file = Path.GetFileName(DbPath),
-            sizeBytes = System.IO.File.Exists(DbPath) ? new FileInfo(DbPath).Length : 0,
+            provider = "PostgreSQL (Supabase)", database = new NpgsqlConnectionStringBuilder(Db.Database.GetConnectionString()).Database,
+            sizeBytes,
             applied = (await Db.Database.GetAppliedMigrationsAsync()).ToList(),
             pending = (await Db.Database.GetPendingMigrationsAsync()).ToList(),
             tables, backups, encryption = "OpenPGP (RSA-2048 + AES-256) for account numbers, counterparties and raw payloads; BCrypt for passwords and PINs",
@@ -424,10 +439,24 @@ public class AdminDatabaseController(
     public async Task<IActionResult> Backup()
     {
         Directory.CreateDirectory(BackupDir);
-        var name = $"frauddetection-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db";
+        var name = $"frauddetection-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip";
         var path = Path.Combine(BackupDir, name);
-        await Db.Database.ExecuteSqlRawAsync($"VACUUM INTO '{path.Replace("'", "''")}'");
-        Audit.Add(Actor, ActorRole, "DatabaseBackup", "Database", name, $"Backup created ({new FileInfo(path).Length} bytes).");
+
+        await using var conn = await OpenConnectionAsync();
+        using (var zip = new ZipArchive(System.IO.File.Create(path), ZipArchiveMode.Create))
+        {
+            foreach (var e in Db.Model.GetEntityTypes().OrderBy(e => e.GetTableName()))
+            {
+                var table = e.GetTableName()!;
+                var entry = zip.CreateEntry(table + ".csv", CompressionLevel.Fastest);
+                await using var entryStream = entry.Open();
+                using var reader = await conn.BeginTextExportAsync($"COPY \"{table}\" TO STDOUT WITH (FORMAT csv, HEADER true)");
+                await using var writer = new StreamWriter(entryStream, leaveOpen: true);
+                await writer.WriteAsync(await reader.ReadToEndAsync());
+            }
+        }
+        var bytes = new FileInfo(path).Length;
+        Audit.Add(Actor, ActorRole, "DatabaseBackup", "Database", name, $"Logical backup created ({bytes} bytes, one CSV per table).");
         await Db.SaveChangesAsync();
         return Ok(new { name });
     }
@@ -437,27 +466,37 @@ public class AdminDatabaseController(
     {
         var path = Path.Combine(BackupDir, Path.GetFileName(name));
         if (!System.IO.File.Exists(path)) return NotFound();
-        return PhysicalFile(path, "application/octet-stream", Path.GetFileName(path));
+        return PhysicalFile(path, "application/zip", Path.GetFileName(path));
     }
 
     [HttpPost("integrity")]
     public async Task<object> Integrity()
     {
-        var result = await Db.Database.SqlQueryRaw<string>("PRAGMA integrity_check").ToListAsync();
-        var fk = await Db.Database.SqlQueryRaw<string>("PRAGMA foreign_key_check").ToListAsync();
-        Audit.Add(Actor, ActorRole, "DatabaseIntegrityCheck", "Database", "sqlite", string.Join("; ", result));
+        // PostgreSQL has no SQLite-style "scan the file for corruption" pragma; a managed,
+        // WAL-based database does not get corrupted the way a single SQLite file can. The
+        // closest meaningful equivalent is: (a) data-checksum failures reported by the
+        // server, if checksums are enabled, and (b) foreign-key constraints that exist but
+        // were never validated (possible after a migration ran with NOT VALID).
+        var checksumFailures = await Db.Database.SqlQueryRaw<long>(
+            "SELECT COALESCE(checksum_failures, 0)::bigint AS \"Value\" FROM pg_stat_database WHERE datname = current_database()").FirstOrDefaultAsync();
+        var unvalidated = await Db.Database.SqlQueryRaw<string>(
+            "SELECT conname AS \"Value\" FROM pg_constraint WHERE contype = 'f' AND NOT convalidated").ToListAsync();
+        var result = checksumFailures == 0 && unvalidated.Count == 0
+            ? new List<string> { "ok" }
+            : new List<string> { $"{checksumFailures} data-checksum failure(s); {unvalidated.Count} unvalidated foreign key(s)" };
+        Audit.Add(Actor, ActorRole, "DatabaseIntegrityCheck", "Database", "postgres", string.Join("; ", result));
         await Db.SaveChangesAsync();
-        return new { integrity = result, foreignKeyViolations = fk.Count };
+        return new { integrity = result, foreignKeyViolations = unvalidated.Count };
     }
 
     [HttpPost("optimize")]
     public async Task<object> Optimize()
     {
-        var before = new FileInfo(DbPath).Length;
+        var before = await Db.Database.SqlQueryRaw<long>("SELECT pg_database_size(current_database())::bigint AS \"Value\"").FirstAsync();
         await Db.Database.ExecuteSqlRawAsync("ANALYZE");
         await Db.Database.ExecuteSqlRawAsync("VACUUM");
-        var after = new FileInfo(DbPath).Length;
-        Audit.Add(Actor, ActorRole, "DatabaseOptimized", "Database", "sqlite", $"ANALYZE + VACUUM: {before} -> {after} bytes.");
+        var after = await Db.Database.SqlQueryRaw<long>("SELECT pg_database_size(current_database())::bigint AS \"Value\"").FirstAsync();
+        Audit.Add(Actor, ActorRole, "DatabaseOptimized", "Database", "postgres", $"ANALYZE + VACUUM: {before} -> {after} bytes.");
         await Db.SaveChangesAsync();
         return new { before, after };
     }
