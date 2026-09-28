@@ -1,5 +1,5 @@
 // Quick end-to-end API smoke test (run with: node smoke_test.mjs)
-const BASE = "http://localhost:5073/api";
+const BASE = process.argv[2] ?? "http://localhost:5073/api";
 let failures = 0;
 
 async function call(method, path, { token, body, device = "smoke-device" } = {}) {

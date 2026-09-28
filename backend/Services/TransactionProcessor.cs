@@ -50,7 +50,8 @@ public class TransactionProcessor(
     MlServiceClient ml,
     SettingsService settings,
     PgpService pgp,
-    AuditService audit)
+    AuditService audit,
+    ILogger<TransactionProcessor> logger)
 {
     private static readonly Random Rng = new();
 
@@ -178,8 +179,20 @@ public class TransactionProcessor(
         MlAssessment? mlResult = null;
         if (!ruleResult.HardBlock)
         {
-            var sampleId = await ml.PickSampleIdAsync(sim?.MlProfile, Rng);
-            mlResult = await ml.PredictAsync(sampleId);
+            // The ML service is a separate deployment (on a free hosting tier it can be
+            // briefly asleep or unreachable). Rather than letting that fail the whole
+            // transaction, fall back to the rule layer alone for this one transaction --
+            // the same "ML not consulted" path already used for a hard block -- and log it,
+            // so an infrastructure hiccup never blocks a legitimate payment outright.
+            try
+            {
+                var sampleId = await ml.PickSampleIdAsync(sim?.MlProfile, Rng);
+                mlResult = await ml.PredictAsync(sampleId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "ML service unavailable while screening a transaction; falling back to the rule layer alone.");
+            }
         }
 
         var risk = RiskScoring.Combine(ruleResult.Score, ruleResult.HardBlock, mlResult?.CombinedMlProbability, riskSettings);
