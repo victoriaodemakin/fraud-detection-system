@@ -1,0 +1,38 @@
+# Render Blueprint: creates the ML service and the backend API from this repository.
+# Secrets are NOT stored here; Render asks for the ones marked "sync: false" when you
+# create the Blueprint (or you can add them later under each service's Environment tab).
+services:
+  # ---- machine learning service (FastAPI + scikit-learn) --------------------------------
+  - type: web
+    name: arclight-ml
+    runtime: docker
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./ml-service/Dockerfile
+    dockerContext: ./ml-service
+    healthCheckPath: /health
+
+  # ---- backend API (ASP.NET Core, .NET 9) ------------------------------------------------
+  - type: web
+    name: arclight-backend
+    runtime: docker
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      # Supabase "Transaction pooler" connection string (postgresql://...:6543/postgres)
+      - key: DATABASE_URL
+        sync: false
+      # Public URL of the ML service above, e.g. https://arclight-ml-xxxx.onrender.com
+      - key: MlService__BaseUrl
+        sync: false
+      # Signs customer and analyst login tokens; Render generates a random one
+      - key: Jwt__Secret
+        generateValue: true
+      # ASCII-armored OpenPGP key pair (the whole text, including the BEGIN/END lines).
+      # Keep the SAME pair if the database already holds encrypted data.
+      - key: PGP_PUBLIC_KEY
+        sync: false
+      - key: PGP_PRIVATE_KEY
+        sync: false
