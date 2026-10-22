@@ -41,7 +41,9 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 static string? ConvertDatabaseUrl(string? url)
 {
     if (string.IsNullOrWhiteSpace(url)) return null;
-    var uri = new Uri(url);
+    // Also accept a ready-made Npgsql connection string (Host=...;Port=...;...) in DATABASE_URL.
+    if (!url.Contains("://")) return url.Trim();
+    var uri = new Uri(url.Trim());
     var userInfo = uri.UserInfo.Split(':', 2);
     return $"Host={uri.Host};Port={(uri.Port > 0 ? uri.Port : 5432)};Database={uri.AbsolutePath.TrimStart('/')};" +
            $"Username={Uri.UnescapeDataString(userInfo[0])};Password={Uri.UnescapeDataString(userInfo.Length > 1 ? userInfo[1] : "")};SSL Mode=Require;Trust Server Certificate=true";
